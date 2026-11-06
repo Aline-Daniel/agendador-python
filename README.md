@@ -4,7 +4,21 @@ Projeto complementar às aulas de agendamento. Ele executa o ETL do projeto 03 o
 
 ## Executar no Windows
 
-Use o terminal nesta pasta:
+Para usar o agendador com o projeto ETL, mantenha as duas pastas **lado a lado** no computador (com esses nomes exatos):
+
+```text
+D:\Downloads\
+├── agendador-python\
+│   └── agendador.py
+└── etl-python-bancos\
+    ├── etl.py
+    └── dados\
+        └── ocorrencias_exemplo.json
+```
+
+A versão publicada no GitHub já utiliza esse caminho. Se você baixou o projeto antes da correção, atualize a sua cópia de `agendador.py`.
+
+Use o terminal na pasta `agendador-python`:
 
 ```powershell
 # Executar ETL do projeto 03 agora
