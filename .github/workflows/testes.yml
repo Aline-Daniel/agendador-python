@@ -9,11 +9,38 @@ jobs:
   testar:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Baixar agendador
+        uses: actions/checkout@v4
+        with:
+          path: agendador-python
+      - name: Baixar ETL publico para teste de integracao
+        uses: actions/checkout@v4
+        with:
+          repository: Aline-Daniel/etl-python-bancos
+          path: etl-python-bancos
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Validar sintaxe
-        run: python -m compileall -q agendador.py tests/
+        run: python -m compileall -q agendador-python/agendador.py agendador-python/tests/
       - name: Executar testes do agendador
-        run: python -m unittest discover -s tests -v
+        run: python -m unittest discover -s agendador-python/tests -v
+      - name: Testar ETL e backup integrados
+        shell: bash
+        run: |
+          python agendador-python/agendador.py --tarefa etl --uma-vez --db "$RUNNER_TEMP/ocorrencias.db" --log "$RUNNER_TEMP/agendador.log"
+          python agendador-python/agendador.py --tarefa backup --uma-vez --db "$RUNNER_TEMP/ocorrencias.db" --backups "$RUNNER_TEMP/backups" --log "$RUNNER_TEMP/agendador.log"
+          python - <<'PY'
+          import os
+          import sqlite3
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"])
+          backups = list((root / "backups").glob("backup_*.db"))
+          assert len(backups) == 1, f"Esperado um backup; encontrados: {len(backups)}"
+          for caminho in [root / "ocorrencias.db", backups[0]]:
+              with sqlite3.connect(caminho) as db:
+                  count = db.execute("SELECT COUNT(*) FROM ocorrencias_anac").fetchone()[0]
+              assert count == 3, f"{caminho}: esperado 3 registros; encontrado {count}"
+          print("Integracao ETL + backup verificada com 3 registros.")
+          PY
