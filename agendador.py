@@ -13,9 +13,10 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parent
-DATA_BASE = ROOT.parent / '03_ETL_Bancos' / 'dados' / 'ocorrencias.db'
-ETL = ROOT.parent / '03_ETL_Bancos' / 'etl.py'
-ORIGEM = ROOT.parent / '03_ETL_Bancos' / 'dados' / 'ocorrencias_exemplo.json'
+ETL_REPO = ROOT.parent / 'etl-python-bancos'
+DATA_BASE = ETL_REPO / 'dados' / 'ocorrencias.db'
+ETL = ETL_REPO / 'etl.py'
+ORIGEM = ETL_REPO / 'dados' / 'ocorrencias_exemplo.json'
 
 
 def fazer_backup(database: Path, pasta: Path) -> Path:
@@ -35,6 +36,11 @@ def executar_tarefa(tarefa: str, database: Path, origem: Path, backups: Path) ->
     if tarefa == 'backup':
         return 'Backup criado: ' + str(fazer_backup(database, backups))
     if tarefa == 'etl':
+        if not ETL.is_file():
+            raise FileNotFoundError(
+                f'Não encontrei o ETL em {ETL}. '
+                "Coloque as pastas agendador-python e etl-python-bancos lado a lado."
+            )
         processo = subprocess.run(
             [sys.executable, str(ETL), '--origem', str(origem), '--db', str(database), '--modo', 'incremental'],
             capture_output=True, text=True, encoding='utf-8', timeout=300, check=False,
