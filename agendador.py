@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 import sqlite3
 import subprocess
+import tempfile
 import sys
 import time
 
@@ -20,17 +21,28 @@ ORIGEM = ETL_REPO / 'dados' / 'ocorrencias_exemplo.json'
 
 
 def fazer_backup(database: Path, pasta: Path) -> Path:
+    """Cria backup consistente, verifica integridade e publica o arquivo só após sucesso."""
     database = Path(database)
     if not database.is_file():
         raise FileNotFoundError(f'Banco SQLite não existe: {database}. Rode o ETL primeiro.')
     pasta = Path(pasta)
     pasta.mkdir(parents=True, exist_ok=True)
     caminho = pasta / ('backup_' + datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '.db')
-    with sqlite3.connect(f'file:{database.resolve()}?mode=ro', uri=True) as origem:
-        with sqlite3.connect(caminho) as destino:
-            origem.backup(destino)
-    return caminho
-
+    # Arquivo temporário na mesma pasta garante substituição atômica ao concluir.
+    with tempfile.NamedTemporaryFile(dir=pasta, prefix='.backup_', suffix='.tmp', delete=False) as tmp:
+        temporario = Path(tmp.name)
+    try:
+        with sqlite3.connect(f'file:{database.resolve()}?mode=ro', uri=True) as origem:
+            with sqlite3.connect(temporario) as destino:
+                origem.backup(destino)
+                verificacao = destino.execute('PRAGMA quick_check').fetchone()
+                if not verificacao or verificacao[0] != 'ok':
+                    raise sqlite3.DatabaseError('Falha na verificação de integridade do backup.')
+        temporario.replace(caminho)
+        return caminho
+    finally:
+        # Nunca deixar um arquivo parcial como se fosse um backup concluído.
+        temporario.unlink(missing_ok=True)
 
 def executar_tarefa(tarefa: str, database: Path, origem: Path, backups: Path) -> str:
     if tarefa == 'backup':
@@ -41,10 +53,13 @@ def executar_tarefa(tarefa: str, database: Path, origem: Path, backups: Path) ->
                 f'Não encontrei o ETL em {ETL}. '
                 "Coloque as pastas agendador-python e etl-python-bancos lado a lado."
             )
-        processo = subprocess.run(
-            [sys.executable, str(ETL), '--origem', str(origem), '--db', str(database), '--modo', 'incremental'],
-            capture_output=True, text=True, encoding='utf-8', timeout=300, check=False,
-        )
+        try:
+            processo = subprocess.run(
+                [sys.executable, str(ETL), '--origem', str(origem), '--db', str(database), '--modo', 'incremental'],
+                capture_output=True, text=True, encoding='utf-8', timeout=300, check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError('ETL excedeu o limite de 300 segundos e foi interrompido.') from exc
         if processo.returncode:
             raise RuntimeError(f'ETL falhou (código {processo.returncode}): {processo.stderr[-400:]}')
         return 'ETL executado: ' + processo.stdout.strip().replace('\n',' ')
