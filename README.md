@@ -36,6 +36,16 @@ python agendador.py --tarefa backup --hora 10:00
 
 A tarefa `backup` precisa que o banco tenha sido criado pela tarefa `etl` antes. Os backups ficam em `backups/` e o histórico em `logs/agendador.log`.
 
+### Proteção dos backups e execução do ETL
+
+- O backup é feito pela API de backup do **SQLite** para obter uma cópia consistente do banco.
+- Antes de disponibilizar o arquivo final, o programa executa uma verificação de integridade (`PRAGMA quick_check`). Um backup com erro não é publicado.
+- A gravação é feita primeiro em um **arquivo temporário**, removido automaticamente em caso de falha, evitando deixar backups parciais na pasta.
+- Cada execução gera um arquivo diferente com data, hora e microssegundos no nome; backups anteriores são preservados.
+- Se o ETL ultrapassar **300 segundos**, a execução é interrompida com uma mensagem de erro legível, registrada pelo agendador.
+
+Esses testes cobrem bancos SQLite locais e o limite de tempo do subprocesso. Use seus próprios procedimentos de retenção para evitar acúmulo de backups.
+
 **Importante:** para executar em horários programados, o script precisa continuar aberto. No Windows, se quiser agendamento mesmo sem terminal aberto, use o **Agendador de Tarefas do Windows** para chamar `python.exe` com `agendador.py --tarefa etl --uma-vez`. Não agende duas instâncias simultâneas para o mesmo banco.
 
 ## Testes
